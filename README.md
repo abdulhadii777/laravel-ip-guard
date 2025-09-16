@@ -1,11 +1,13 @@
 # Laravel IP Guard
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/ahs/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/ahs/laravel-ip-guard)
-[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/ahs/laravel-ip-guard/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/ahs/laravel-ip-guard/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/ahs/laravel-ip-guard/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/ahs/laravel-ip-guard/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
-[![Total Downloads](https://img.shields.io/packagist/dt/ahs/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/ahs/laravel-ip-guard)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/abdulhadii777/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/abdulhadii777/laravel-ip-guard)
+[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/abdulhadii777/laravel-ip-guard/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/abdulhadii777/laravel-ip-guard/actions?query=workflow%3Arun-tests+branch%3Amain)
+[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/abdulhadii777/laravel-ip-guard/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/abdulhadii777/laravel-ip-guard/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
+[![Total Downloads](https://img.shields.io/packagist/dt/abdulhadii777/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/abdulhadii777/laravel-ip-guard)
 
 A powerful Laravel middleware package for IP-based access control with whitelist and blacklist support. Protect your application by allowing or blocking specific IP addresses, IP ranges (CIDR), and wildcard patterns.
+
+**Current Version:** v0.1.1
 
 ## Features
 
@@ -31,7 +33,7 @@ We highly appreciate you sending us a postcard from your hometown, mentioning wh
 You can install the package via composer:
 
 ```bash
-composer require ahs/laravel-ip-guard
+composer require abdulhadii777/laravel-ip-guard
 ```
 
 The package will automatically register itself. You can publish the config file with:
