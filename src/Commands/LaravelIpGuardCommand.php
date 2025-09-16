@@ -1,12 +1,12 @@
 <?php
 
-namespace VendorName\Skeleton\Commands;
+namespace Ahs\LaravelIpGuard\Commands;
 
 use Illuminate\Console\Command;
 
-class SkeletonCommand extends Command
+class LaravelIpGuardCommand extends Command
 {
-    public $signature = 'skeleton';
+    public $signature = 'laravel-ip-guard';
 
     public $description = 'My command';
 

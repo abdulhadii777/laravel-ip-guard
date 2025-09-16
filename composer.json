@@ -1,17 +1,17 @@
 {
-    "name": ":vendor_slug/:package_slug",
-    "description": ":package_description",
+    "name": "ahs/laravel-ip-guard",
+    "description": "Middleware to restrict application usage from blacklisted IPs with whitelist overrides.",
     "keywords": [
-        ":vendor_name",
+        "ahs",
         "laravel",
-        ":package_slug"
+        "laravel-ip-guard"
     ],
-    "homepage": "https://github.com/:vendor_slug/:package_slug",
+    "homepage": "https://github.com/ahs/laravel-ip-guard",
     "license": "MIT",
     "authors": [
         {
-            "name": ":author_name",
-            "email": "author@domain.com",
+            "name": "Abdul Hadi",
+            "email": "102801061+abdulhadii777@users.noreply.github.com",
             "role": "Developer"
         }
     ],
@@ -35,13 +35,13 @@
     },
     "autoload": {
         "psr-4": {
-            "VendorName\\Skeleton\\": "src/",
-            "VendorName\\Skeleton\\Database\\Factories\\": "database/factories/"
+            "Ahs\\LaravelIpGuard\\": "src/",
+            "Ahs\\LaravelIpGuard\\Database\\Factories\\": "database/factories/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "VendorName\\Skeleton\\Tests\\": "tests/",
+            "Ahs\\LaravelIpGuard\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/"
         }
     },
@@ -63,10 +63,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "VendorName\\Skeleton\\SkeletonServiceProvider"
+                "Ahs\\LaravelIpGuard\\LaravelIpGuardServiceProvider"
             ],
             "aliases": {
-                "Skeleton": "VendorName\\Skeleton\\Facades\\Skeleton"
+                "LaravelIpGuard": "Ahs\\LaravelIpGuard\\Facades\\LaravelIpGuard"
             }
         }
     },
