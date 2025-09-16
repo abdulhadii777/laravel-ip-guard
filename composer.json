@@ -1,12 +1,12 @@
 {
-    "name": "ahs/laravel-ip-guard",
+    "name": "abdulhadii777/laravel-ip-guard",
     "description": "Middleware to restrict application usage from blacklisted IPs with whitelist overrides.",
     "keywords": [
         "ahs",
         "laravel",
         "laravel-ip-guard"
     ],
-    "homepage": "https://github.com/ahs/laravel-ip-guard",
+    "homepage": "https://github.com/abdulhadii777/laravel-ip-guard",
     "license": "MIT",
     "authors": [
         {
