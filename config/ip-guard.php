@@ -4,15 +4,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Lists
+    | Enable/Disable IP Guard
     |--------------------------------------------------------------------------
-    | Use '*' to match all IPs, exact IPs (e.g., '1.2.3.4'),
-    | CIDR (e.g., '10.0.0.0/8'), or wildcards (e.g., '192.168.*.*').
-    | null or [] means "no specific list".
+    | Set to false to disable IP restrictions entirely.
+    | You can also use IP_GUARD_ENABLED environment variable.
     */
 
-    'whitelist' => null,   // e.g. ['203.0.113.10', '10.0.0.0/8']
+    'enabled' => env('IP_GUARD_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Lists
+    |--------------------------------------------------------------------------
+    | Use '*' to match all IPs or exact IPs (e.g., '1.2.3.4').
+    | null or [] means "no specific list".
+    |
+    | Priority order:
+    | 1. Blacklist (highest priority) - if IP matches, block access
+    |    - '*' in blacklist blocks ALL IPs regardless of whitelist
+    | 2. Whitelist - if IP matches, allow access (only if not blacklisted)
+    | 3. null/empty - no restrictions (only if not blacklisted)
+    |
+    | Example: blacklist=['*'] + whitelist=['1.2.3.4'] = NO ACCESS (all blocked)
+    */
+
     'blacklist' => null,   // e.g. ['*'] to block everyone except explicit whitelist
+    'whitelist' => null,   // e.g. ['203.0.113.10', '198.51.100.20']
 
     /*
     |--------------------------------------------------------------------------

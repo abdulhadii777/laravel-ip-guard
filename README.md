@@ -5,16 +5,17 @@
 [![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/abdulhadii777/laravel-ip-guard/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/abdulhadii777/laravel-ip-guard/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/abdulhadii777/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/abdulhadii777/laravel-ip-guard)
 
-A powerful Laravel middleware package for IP-based access control with whitelist and blacklist support. Protect your application by allowing or blocking specific IP addresses, IP ranges (CIDR), and wildcard patterns.
+A powerful Laravel middleware package for IP-based access control with whitelist and blacklist support. Protect your application by allowing or blocking specific IP addresses with a flexible priority system.
 
 **Current Version:** v0.1.1
 
 ## Features
 
-- **Whitelist Support**: Allow only specific IPs or IP ranges
-- **Blacklist Support**: Block specific IPs or IP ranges  
-- **CIDR Notation**: Support for IP ranges like `192.168.1.0/24`
-- **Wildcard Patterns**: Support for patterns like `192.168.*.*`
+- **Priority-Based Access Control**: Blacklist takes highest priority over whitelist
+- **Environment Toggle**: Enable/disable IP restrictions via environment variable
+- **Whitelist Support**: Allow only specific IPs
+- **Blacklist Support**: Block specific IPs (including `*` for all IPs)
+- **Exact IP Matching**: Support for exact IP addresses only
 - **Proxy Support**: Works behind load balancers and proxies
 - **Flexible Configuration**: Easy to configure via config file
 - **Custom Error Responses**: JSON or plain text error responses
@@ -56,21 +57,36 @@ After publishing the config file, you can configure the package in `config/ip-gu
 return [
     /*
     |--------------------------------------------------------------------------
+    | Enable/Disable IP Guard
+    |--------------------------------------------------------------------------
+    | Set to false to disable IP restrictions entirely.
+    | You can also use IP_GUARD_ENABLED environment variable.
+    */
+    
+    'enabled' => env('IP_GUARD_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | IP Lists
     |--------------------------------------------------------------------------
     | Configure whitelist and blacklist IPs. Use '*' to match all IPs.
-    | Supports exact IPs, CIDR notation, and wildcard patterns.
+    | Supports exact IPs only.
+    |
+    | Priority order:
+    | 1. Blacklist (highest priority) - if IP matches, block access
+    |    - '*' in blacklist blocks ALL IPs regardless of whitelist
+    | 2. Whitelist - if IP matches, allow access (only if not blacklisted)
+    | 3. null/empty - no restrictions (only if not blacklisted)
     */
     
     'whitelist' => [
         '203.0.113.10',        // Exact IP
-        '10.0.0.0/8',          // CIDR range
-        '192.168.*.*',         // Wildcard pattern
+        '198.51.100.20',       // Exact IP
     ],
     
     'blacklist' => [
         '192.168.1.100',       // Block specific IP
-        '10.0.1.0/24',         // Block IP range
+        '10.0.1.50',           // Block specific IP
     ],
 
     /*
@@ -147,29 +163,11 @@ class AdminController extends Controller
 
 ## IP Matching Rules
 
-The package supports multiple IP matching formats:
+The package supports exact IP matching only:
 
 ### Exact IP Matching
 ```php
 'whitelist' => ['203.0.113.10', '198.51.100.20']
-```
-
-### CIDR Notation
-```php
-'whitelist' => [
-    '10.0.0.0/8',      // All IPs from 10.0.0.0 to 10.255.255.255
-    '192.168.1.0/24',  // All IPs from 192.168.1.0 to 192.168.1.255
-    '172.16.0.0/12',   // All IPs from 172.16.0.0 to 172.31.255.255
-]
-```
-
-### Wildcard Patterns
-```php
-'whitelist' => [
-    '192.168.*.*',     // All IPs starting with 192.168
-    '10.0.*.100',      // All IPs like 10.0.x.100
-    '203.0.113.*',     // All IPs like 203.0.113.x
-]
 ```
 
 ### Block All IPs
@@ -181,9 +179,41 @@ The package supports multiple IP matching formats:
 
 The middleware follows this priority order:
 
-1. **Whitelist Check**: If the client IP matches any whitelist rule, access is **always allowed**
-2. **Blacklist Check**: If the client IP matches any blacklist rule, access is **denied**
-3. **Default**: If no rules match, access is **allowed**
+1. **Environment Check**: If `IP_GUARD_ENABLED=false`, all IPs are **allowed** (no restrictions)
+2. **Blacklist Check** (Highest Priority): If the client IP matches any blacklist rule, access is **denied**
+   - `*` in blacklist blocks **ALL IPs** regardless of whitelist
+3. **Whitelist Check**: If whitelist is configured and IP matches, access is **allowed**
+4. **Whitelist Enforcement**: If whitelist is configured but IP doesn't match, access is **denied**
+5. **Default**: If whitelist is null/empty and IP is not blacklisted, access is **allowed**
+
+### Examples:
+
+**Scenario 1: Blacklist with `*`**
+```php
+'blacklist' => ['*'],
+'whitelist' => ['1.2.3.4', '5.6.7.8']
+// Result: NO ACCESS (all IPs blocked by blacklist)
+```
+
+**Scenario 2: Normal priority**
+```php
+'blacklist' => ['192.168.1.100'],
+'whitelist' => ['1.2.3.4', '5.6.7.8']
+// Result: Only 1.2.3.4 and 5.6.7.8 allowed, 192.168.1.100 blocked, others blocked
+```
+
+**Scenario 3: No restrictions**
+```php
+'blacklist' => null,
+'whitelist' => null
+// Result: ALL ACCESS (no restrictions)
+```
+
+**Scenario 4: Disabled**
+```env
+IP_GUARD_ENABLED=false
+// Result: ALL ACCESS (IP guard disabled)
+```
 
 ## Proxy and Load Balancer Support
 
@@ -230,16 +260,37 @@ Configure the response format in the config:
 // config/ip-guard.php
 'whitelist' => [
     '203.0.113.10',    // Admin office IP
-    '198.51.100.0/24', // Admin network
+    '198.51.100.20',   // Admin home IP
 ],
 'blacklist' => ['*'],  // Block all other IPs
 ```
 
-### Block Specific Countries
+### Environment-Based Control
+```env
+# .env
+IP_GUARD_ENABLED=true   # Enable IP restrictions
+# IP_GUARD_ENABLED=false  # Disable IP restrictions entirely
+```
+
+### Mixed Blacklist and Whitelist
+```php
+// config/ip-guard.php
+'blacklist' => [
+    '192.168.1.100',   // Block specific problematic IP
+    '10.0.1.50',       // Block specific IP
+],
+'whitelist' => [
+    '203.0.113.10',    // Allow specific trusted IP
+    '198.51.100.20',   // Allow specific trusted IP
+],
+// Result: Only whitelisted IPs allowed, except blacklisted ones
+```
+
+### Block Specific IPs
 ```php
 'blacklist' => [
-    '1.0.0.0/8',       // Example: Block IP range
-    '2.0.0.0/8',       // Add more ranges as needed
+    '1.2.3.4',         // Block specific IP
+    '5.6.7.8',         // Block another IP
 ],
 ```
 
@@ -247,8 +298,8 @@ Configure the response format in the config:
 ```php
 'whitelist' => [
     '127.0.0.1',       // Localhost
-    '192.168.*.*',     // Local network
-    '10.0.0.0/8',      // Private network
+    '192.168.1.100',   // Local development IP
+    '10.0.0.50',       // Another local IP
 ],
 ```
 
@@ -274,8 +325,11 @@ composer test
 
 1. **Middleware not working**: Ensure the middleware is properly registered and applied
 2. **Wrong IP detected**: Check your `ip_header` configuration and proxy setup
-3. **Blocked legitimate users**: Review your whitelist/blacklist rules
-4. **CIDR not working**: Verify the CIDR notation is correct
+3. **Blocked legitimate users**: Review your whitelist/blacklist rules and priority order
+4. **IP guard not working**: Check if `IP_GUARD_ENABLED` is set to `true` in your environment
+5. **All IPs blocked**: Check if `*` is in your blacklist (this blocks all IPs)
+6. **Whitelist not working**: Remember blacklist takes priority - check if IP is blacklisted first
+7. **Invalid IP format**: Ensure all IPs in your lists are valid IPv4 or IPv6 addresses
 
 ### Debug Mode
 

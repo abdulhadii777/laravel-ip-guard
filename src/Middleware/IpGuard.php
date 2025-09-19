@@ -6,30 +6,43 @@ use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Str;
 
 class IpGuard
 {
     public function handle(Request $request, Closure $next): Response|JsonResponse
     {
-        $config     = config('ip-guard');
-        $whitelist  = self::normalizeList($config['whitelist'] ?? null);
-        $blacklist  = self::normalizeList($config['blacklist'] ?? null);
-        $ipHeader   = $config['ip_header'] ?? null;
-
-        $clientIp = self::getClientIp($request, $ipHeader);
-
-        // 1) If whitelisted, always allow
-        if (self::matches($clientIp, $whitelist)) {
+        $config = config('ip-guard');
+        
+        // Check if IP guard is enabled
+        if (!($config['enabled'] ?? true)) {
             return $next($request);
         }
 
-        // 2) If blacklisted (including '*'), block
+        $whitelist = self::normalizeList($config['whitelist'] ?? null);
+        $blacklist = self::normalizeList($config['blacklist'] ?? null);
+        $ipHeader  = $config['ip_header'] ?? null;
+
+        $clientIp = self::getClientIp($request, $ipHeader);
+
+        // 1) Highest priority: Check blacklist first
+        // If IP is blacklisted (including '*' which blocks all IPs), 
+        // block access regardless of whitelist
         if (self::matches($clientIp, $blacklist)) {
             return self::deny($config);
         }
 
-        // 3) Otherwise allow
+        // 2) Check whitelist only if not blacklisted
+        // If whitelist is configured and IP matches, allow access
+        if (!empty($whitelist) && self::matches($clientIp, $whitelist)) {
+            return $next($request);
+        }
+
+        // 3) If whitelist is configured but IP doesn't match, block access
+        if (!empty($whitelist)) {
+            return self::deny($config);
+        }
+
+        // 4) If whitelist is null/empty and not blacklisted, allow access
         return $next($request);
     }
 
@@ -66,9 +79,7 @@ class IpGuard
         if (in_array('*', $list, true)) return true;
 
         foreach ($list as $rule) {
-            if (self::matchExact($ip, $rule))      return true;
-            if (self::matchWildcard($ip, $rule))   return true;
-            if (self::matchCidr($ip, $rule))       return true;
+            if (self::matchExact($ip, $rule)) return true;
         }
         return false;
     }
@@ -78,38 +89,6 @@ class IpGuard
         return filter_var($rule, FILTER_VALIDATE_IP) && $ip === $rule;
     }
 
-    private static function matchWildcard(string $ip, string $rule): bool
-    {
-        // crude wildcard support like 192.168.*.* using Str::is
-        if (str_contains($rule, '*')) {
-            // Str::is treats pattern as simple wildcard
-            return Str::is($rule, $ip);
-        }
-        return false;
-    }
-
-    private static function matchCidr(string $ip, string $rule): bool
-    {
-        if (!str_contains($rule, '/')) return false;
-
-        [$subnet, $mask] = explode('/', $rule, 2);
-        if (!filter_var($subnet, FILTER_VALIDATE_IP)) return false;
-        $mask = (int) $mask;
-
-        // Only IPv4 CIDR here; extend to IPv6 if needed
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) &&
-            filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) &&
-            $mask >= 0 && $mask <= 32) {
-
-            $ipLong     = ip2long($ip);
-            $subnetLong = ip2long($subnet);
-            $maskLong   = -1 << (32 - $mask);
-
-            return ($ipLong & $maskLong) === ($subnetLong & $maskLong);
-        }
-
-        return false;
-    }
 
     private static function deny(array $config): Response|JsonResponse
     {
