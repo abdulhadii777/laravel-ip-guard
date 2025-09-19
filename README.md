@@ -5,19 +5,23 @@
 [![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/abdulhadii777/laravel-ip-guard/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/abdulhadii777/laravel-ip-guard/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/abdulhadii777/laravel-ip-guard.svg?style=flat-square)](https://packagist.org/packages/abdulhadii777/laravel-ip-guard)
 
-A powerful Laravel middleware package for IP-based access control with whitelist and blacklist support. Protect your application by allowing or blocking specific IP addresses with a flexible priority system.
+A powerful Laravel middleware package for IP-based access control with whitelist and blacklist support. Protect your application by allowing or blocking specific IP addresses with dynamic database management and a flexible priority system.
 
 **Current Version:** v0.1.1
 
 ## Features
 
+- **Dynamic Database Management**: Add/remove IPs without code changes
 - **Priority-Based Access Control**: Blacklist takes highest priority over whitelist
 - **Environment Toggle**: Enable/disable IP restrictions via environment variable
 - **Whitelist Support**: Allow only specific IPs
 - **Blacklist Support**: Block specific IPs (including `*` for all IPs)
 - **Exact IP Matching**: Support for exact IP addresses only
+- **Soft Toggle Control**: Enable/disable IPs without deleting records
+- **Artisan Commands**: Full CLI management interface
+- **Facade Support**: Easy programmatic access
 - **Proxy Support**: Works behind load balancers and proxies
-- **Flexible Configuration**: Easy to configure via config file
+- **Fallback Support**: Falls back to config if database unavailable
 - **Custom Error Responses**: JSON or plain text error responses
 - **Laravel Integration**: Seamless integration with Laravel middleware
 
@@ -37,21 +41,29 @@ You can install the package via composer:
 composer require abdulhadii777/laravel-ip-guard
 ```
 
-The package will automatically register itself. You can publish the config file with:
+The package will automatically register itself. You can publish the config file and migration with:
 
 ```bash
 php artisan vendor:publish --provider="Ahs\LaravelIpGuard\LaravelIpGuardServiceProvider" --tag="config"
+php artisan vendor:publish --provider="Ahs\LaravelIpGuard\LaravelIpGuardServiceProvider" --tag="migrations"
 ```
 
-Or use the package's publish command:
+Or use the package's publish commands:
 
 ```bash
 php artisan vendor:publish --tag="ip-guard-config"
+php artisan vendor:publish --tag="ip-guard-migrations"
+```
+
+Then run the migration:
+
+```bash
+php artisan migrate
 ```
 
 ## Configuration
 
-After publishing the config file, you can configure the package in `config/ip-guard.php`:
+After publishing the config file, you can configure the package in `config/ip-guard.php`. The package now uses **database-driven IP management** by default, with config as fallback:
 
 ```php
 return [
@@ -67,27 +79,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | IP Lists
+    | IP Lists (Fallback Configuration)
     |--------------------------------------------------------------------------
-    | Configure whitelist and blacklist IPs. Use '*' to match all IPs.
-    | Supports exact IPs only.
+    | These are used as fallback when database is unavailable.
+    | Use '*' to match all IPs. Supports exact IPs only.
     |
     | Priority order:
     | 1. Blacklist (highest priority) - if IP matches, block access
     |    - '*' in blacklist blocks ALL IPs regardless of whitelist
     | 2. Whitelist - if IP matches, allow access (only if not blacklisted)
     | 3. null/empty - no restrictions (only if not blacklisted)
+    |
+    | Example: blacklist=['*'] + whitelist=['1.2.3.4'] = NO ACCESS (all blocked)
     */
     
-    'whitelist' => [
-        '203.0.113.10',        // Exact IP
-        '198.51.100.20',       // Exact IP
-    ],
-    
-    'blacklist' => [
-        '192.168.1.100',       // Block specific IP
-        '10.0.1.50',           // Block specific IP
-    ],
+    'whitelist' => null,   // Fallback whitelist (use database for dynamic management)
+    'blacklist' => null,   // Fallback blacklist (use database for dynamic management)
 
     /*
     |--------------------------------------------------------------------------
@@ -114,7 +121,121 @@ return [
 ];
 ```
 
+## Database Management
+
+The package now uses **database-driven IP management** by default. IPs are stored in the `ip_guards` table with the following structure:
+
+- `id`: Primary key
+- `ip_address`: The IP address (exact match only)
+- `type`: Either 'whitelist' or 'blacklist'
+- `description`: Optional description for the IP
+- `is_active`: Boolean flag to enable/disable the IP
+- `created_at` / `updated_at`: Timestamps
+
+### Database Schema
+
+```sql
+CREATE TABLE ip_guards (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    ip_address VARCHAR(255) NOT NULL,
+    type ENUM('whitelist', 'blacklist') NOT NULL,
+    description TEXT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    INDEX idx_ip_type (ip_address, type),
+    INDEX idx_type_active (type, is_active),
+    UNIQUE KEY unique_ip_type (ip_address, type)
+);
+```
+
 ## Usage
+
+### Dynamic IP Management
+
+#### Via Facade
+
+```php
+use Ahs\LaravelIpGuard\Facades\LaravelIpGuard;
+
+// Add IPs to whitelist
+LaravelIpGuard::addToWhitelist('192.168.1.100', 'Office IP');
+LaravelIpGuard::addToWhitelist('203.0.113.10', 'Admin IP');
+
+// Add IPs to blacklist
+LaravelIpGuard::addToBlacklist('10.0.0.50', 'Blocked IP');
+LaravelIpGuard::addToBlacklist('*', 'Block all IPs');
+
+// Check IP status
+$isWhitelisted = LaravelIpGuard::isWhitelisted('192.168.1.100');
+$isBlacklisted = LaravelIpGuard::isBlacklisted('10.0.0.50');
+
+// Get IP lists
+$whitelistIps = LaravelIpGuard::getWhitelistIps();
+$blacklistIps = LaravelIpGuard::getBlacklistIps();
+
+// Remove IPs
+LaravelIpGuard::removeFromWhitelist('192.168.1.100');
+LaravelIpGuard::removeFromBlacklist('10.0.0.50');
+
+// Bulk operations
+$ips = ['192.168.1.101', '192.168.1.102', '192.168.1.103'];
+LaravelIpGuard::bulkAddToWhitelist($ips, 'Office Network');
+
+// Get statistics
+$stats = LaravelIpGuard::getStats();
+// Returns: ['whitelist_count' => 5, 'blacklist_count' => 2, 'total_count' => 7]
+```
+
+#### Via Artisan Commands
+
+```bash
+# Add IPs
+php artisan ip-guard:manage add whitelist 192.168.1.100 --description="Office IP"
+php artisan ip-guard:manage add blacklist 10.0.0.50 --description="Blocked IP"
+
+# List IPs
+php artisan ip-guard:manage list                    # List all IPs
+php artisan ip-guard:manage list whitelist          # List whitelist only
+php artisan ip-guard:manage list blacklist          # List blacklist only
+
+# Remove IPs
+php artisan ip-guard:manage remove whitelist 192.168.1.100
+php artisan ip-guard:manage remove blacklist 10.0.0.50
+
+# Toggle IP status (enable/disable without deleting)
+php artisan ip-guard:manage toggle --id=1
+
+# Clear IPs
+php artisan ip-guard:manage clear whitelist         # Clear all whitelist IPs
+php artisan ip-guard:manage clear blacklist         # Clear all blacklist IPs
+php artisan ip-guard:manage clear                   # Clear all IPs
+
+# Show statistics
+php artisan ip-guard:manage stats
+```
+
+#### Via Model
+
+```php
+use Ahs\LaravelIpGuard\Models\IpGuard;
+
+// Direct model usage
+IpGuard::addToWhitelist('192.168.1.100', 'Office IP');
+IpGuard::addToBlacklist('10.0.0.50', 'Blocked IP');
+
+// Query IPs
+$whitelistIps = IpGuard::whitelist()->active()->get();
+$blacklistIps = IpGuard::blacklist()->active()->get();
+
+// Toggle IP status
+$ip = IpGuard::find(1);
+$ip->toggleActive(); // Toggle between active/inactive
+
+// Check if IP is in list
+$isWhitelisted = IpGuard::isWhitelisted('192.168.1.100');
+$isBlacklisted = IpGuard::isBlacklisted('10.0.0.50');
+```
 
 ### Basic Middleware Usage
 
@@ -257,12 +378,15 @@ Configure the response format in the config:
 
 ### Admin Panel Protection
 ```php
-// config/ip-guard.php
-'whitelist' => [
-    '203.0.113.10',    // Admin office IP
-    '198.51.100.20',   // Admin home IP
-],
-'blacklist' => ['*'],  // Block all other IPs
+// Via Artisan Commands
+php artisan ip-guard:manage add whitelist 203.0.113.10 --description="Admin Office"
+php artisan ip-guard:manage add whitelist 198.51.100.20 --description="Admin Home"
+php artisan ip-guard:manage add blacklist "*" --description="Block all others"
+
+// Via Facade
+LaravelIpGuard::addToWhitelist('203.0.113.10', 'Admin Office');
+LaravelIpGuard::addToWhitelist('198.51.100.20', 'Admin Home');
+LaravelIpGuard::addToBlacklist('*', 'Block all others');
 ```
 
 ### Environment-Based Control
@@ -274,41 +398,137 @@ IP_GUARD_ENABLED=true   # Enable IP restrictions
 
 ### Mixed Blacklist and Whitelist
 ```php
-// config/ip-guard.php
-'blacklist' => [
-    '192.168.1.100',   // Block specific problematic IP
-    '10.0.1.50',       // Block specific IP
-],
-'whitelist' => [
-    '203.0.113.10',    // Allow specific trusted IP
-    '198.51.100.20',   // Allow specific trusted IP
-],
+// Via Artisan Commands
+php artisan ip-guard:manage add blacklist 192.168.1.100 --description="Problematic IP"
+php artisan ip-guard:manage add blacklist 10.0.1.50 --description="Blocked IP"
+php artisan ip-guard:manage add whitelist 203.0.113.10 --description="Trusted IP"
+php artisan ip-guard:manage add whitelist 198.51.100.20 --description="Trusted IP"
+
+// Via Facade
+LaravelIpGuard::addToBlacklist('192.168.1.100', 'Problematic IP');
+LaravelIpGuard::addToBlacklist('10.0.1.50', 'Blocked IP');
+LaravelIpGuard::addToWhitelist('203.0.113.10', 'Trusted IP');
+LaravelIpGuard::addToWhitelist('198.51.100.20', 'Trusted IP');
 // Result: Only whitelisted IPs allowed, except blacklisted ones
 ```
 
 ### Block Specific IPs
 ```php
-'blacklist' => [
-    '1.2.3.4',         // Block specific IP
-    '5.6.7.8',         // Block another IP
-],
+// Via Artisan Commands
+php artisan ip-guard:manage add blacklist 1.2.3.4 --description="Blocked IP"
+php artisan ip-guard:manage add blacklist 5.6.7.8 --description="Blocked IP"
+
+// Via Facade
+LaravelIpGuard::addToBlacklist('1.2.3.4', 'Blocked IP');
+LaravelIpGuard::addToBlacklist('5.6.7.8', 'Blocked IP');
 ```
 
 ### Development Environment
 ```php
-'whitelist' => [
-    '127.0.0.1',       // Localhost
-    '192.168.1.100',   // Local development IP
-    '10.0.0.50',       // Another local IP
-],
+// Via Artisan Commands
+php artisan ip-guard:manage add whitelist 127.0.0.1 --description="Localhost"
+php artisan ip-guard:manage add whitelist 192.168.1.100 --description="Dev IP"
+php artisan ip-guard:manage add whitelist 10.0.0.50 --description="Local IP"
+
+// Via Facade
+LaravelIpGuard::addToWhitelist('127.0.0.1', 'Localhost');
+LaravelIpGuard::addToWhitelist('192.168.1.100', 'Dev IP');
+LaravelIpGuard::addToWhitelist('10.0.0.50', 'Local IP');
+```
+
+### Temporary IP Management
+```php
+// Temporarily disable an IP without deleting
+$ip = IpGuard::find(1);
+$ip->toggleActive(); // Disable
+// Later...
+$ip->toggleActive(); // Re-enable
+
+// Or via command
+php artisan ip-guard:manage toggle --id=1
 ```
 
 ## Testing
 
-Run the tests with:
+The package includes comprehensive tests using Pest 4 with MySQL database testing.
+
+### Prerequisites
+
+1. **MySQL Database**: Ensure MySQL is running and accessible
+2. **Test Database**: Create a test database (or run the setup script)
 
 ```bash
+# Create test database
+mysql -u root -p < tests/setup-test-db.sql
+```
+
+### Running Tests
+
+```bash
+# Run all tests
 composer test
+
+# Run tests with coverage
+composer test -- --coverage
+
+# Run specific test file
+./vendor/bin/pest tests/Unit/Models/IpGuardTest.php
+
+# Run tests with verbose output
+./vendor/bin/pest --verbose
+```
+
+### Test Structure
+
+The test suite includes:
+
+- **Unit Tests** (`tests/Unit/`):
+  - `Models/IpGuardTest.php` - Model functionality and scopes
+  - `Services/LaravelIpGuardTest.php` - Service class methods
+
+- **Feature Tests** (`tests/Feature/`):
+  - `Middleware/IpGuardTest.php` - Middleware behavior and IP matching
+  - `Commands/IpGuardCommandTest.php` - Artisan command functionality
+  - `Integration/IpGuardIntegrationTest.php` - End-to-end workflows
+
+### Test Configuration
+
+Tests use MySQL database with the following configuration:
+- **Database**: `laravel_ip_guard_test`
+- **Host**: `127.0.0.1`
+- **Port**: `3306`
+- **Username**: `root` (configurable)
+- **Password**: Empty (configurable)
+
+### Test Coverage
+
+The test suite covers:
+- ✅ Model creation, updates, and deletion
+- ✅ Database scopes and relationships
+- ✅ Service facade methods
+- ✅ Middleware IP matching logic
+- ✅ Priority system (blacklist > whitelist)
+- ✅ Artisan command functionality
+- ✅ Error handling and validation
+- ✅ Custom headers and configuration
+- ✅ Fallback to config when database unavailable
+- ✅ Integration workflows
+- ✅ Bulk operations
+- ✅ Statistics and reporting
+
+### Custom Test Configuration
+
+You can customize test database settings in `phpunit.xml.dist`:
+
+```xml
+<php>
+    <env name="DB_CONNECTION" value="mysql"/>
+    <env name="DB_DATABASE" value="your_test_database"/>
+    <env name="DB_USERNAME" value="your_username"/>
+    <env name="DB_PASSWORD" value="your_password"/>
+    <env name="DB_HOST" value="127.0.0.1"/>
+    <env name="DB_PORT" value="3306"/>
+</php>
 ```
 
 ## Security Considerations
@@ -330,6 +550,9 @@ composer test
 5. **All IPs blocked**: Check if `*` is in your blacklist (this blocks all IPs)
 6. **Whitelist not working**: Remember blacklist takes priority - check if IP is blacklisted first
 7. **Invalid IP format**: Ensure all IPs in your lists are valid IPv4 or IPv6 addresses
+8. **Database connection issues**: Check if migration has been run and database is accessible
+9. **IP not found in database**: Use `php artisan ip-guard:manage list` to check if IP exists
+10. **Inactive IPs**: Check if IP is disabled using `php artisan ip-guard:manage toggle --id=X`
 
 ### Debug Mode
 

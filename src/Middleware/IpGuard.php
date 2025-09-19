@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Ahs\LaravelIpGuard\Models\IpGuard as IpGuardModel;
 
 class IpGuard
 {
@@ -18,8 +19,9 @@ class IpGuard
             return $next($request);
         }
 
-        $whitelist = self::normalizeList($config['whitelist'] ?? null);
-        $blacklist = self::normalizeList($config['blacklist'] ?? null);
+        // Get IPs from database
+        $whitelist = self::getDatabaseIps('whitelist');
+        $blacklist = self::getDatabaseIps('blacklist');
         $ipHeader  = $config['ip_header'] ?? null;
 
         $clientIp = self::getClientIp($request, $ipHeader);
@@ -90,6 +92,20 @@ class IpGuard
     }
 
 
+    private static function getDatabaseIps(string $type): array
+    {
+        try {
+            return IpGuardModel::where('type', $type)
+                ->where('is_active', true)
+                ->pluck('ip_address')
+                ->toArray();
+        } catch (\Exception $e) {
+            // If database is not available, fallback to config
+            $config = config('ip-guard');
+            return self::normalizeList($config[$type . 'list'] ?? null);
+        }
+    }
+
     private static function deny(array $config): Response|JsonResponse
     {
         $status  = (int) data_get($config, 'error.status', 403);
@@ -100,6 +116,6 @@ class IpGuard
             return response()->json(['message' => $message], $status);
         }
 
-        return response($message, $status);
+        return response($message, $status)->header('Content-Type', 'text/plain');
     }
 }
